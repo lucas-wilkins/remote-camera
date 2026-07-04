@@ -396,7 +396,7 @@ public:
 
 
     void mainLoop(int client_fd) override;
-    virtual void sendData(int client_fd, T data);
+    virtual void sendData(int client_fd, T data) = 0;
 
 private:
     BufferSystem<T, N>* buffer_system_;
