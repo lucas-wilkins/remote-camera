@@ -6,7 +6,10 @@ git pull
 mkdir server/build
 
 # Configure the project
-cmake server
+cd server/build
+cmake ..
 
 # Build the project
-cmake --build server
+cmake --build .
+
+cd ~/remote-camera
