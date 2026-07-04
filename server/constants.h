@@ -1,0 +1,17 @@
+
+
+#ifndef SERVER_MESSAGETYPES_H
+#define SERVER_MESSAGETYPES_H
+
+#define DEFAULT_CONTROL_PORT 10001
+#define DEFAULT_DATA_PORT 10002
+
+enum ControlMessageType
+{
+    STATUS,
+    CAPTURE,
+    SET_EXPOSURE,
+    SET_GAIN
+};
+
+#endif //SERVER_MESSAGETYPES_H
