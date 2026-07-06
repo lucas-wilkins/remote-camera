@@ -34,65 +34,67 @@ int main()
     CameraManager cm;
     cm.start();
 
-    auto cameras = cm.cameras();
-
-    if (cameras.empty()) {
-        std::cerr << "No cameras found\n";
-        return -1;
-    }
-
-    auto camera = cameras[0];
-
-    camera->acquire();
-
-    auto config =
-        camera->generateConfiguration({ StreamRole::StillCapture });
-
-    camera->configure(config.get());
-    Stream *stream = config->at(0).stream();
-
-    // Buffers
-    std::unique_ptr<FrameBufferAllocator> allocator =
-    std::make_unique<FrameBufferAllocator>(camera);
-
-    allocator->allocate(stream);
-
-    const auto &buffers = allocator->buffers(stream);
-
-    // Connect completion callback
-    camera->requestCompleted.connect(requestComplete);
-
-    std::unique_ptr<Request> request =
-        camera->createRequest();
-
-    request->addBuffer(stream, buffers[0].get());
-
-    // Manual exposure settings
-    request->controls().set(controls::AeEnable, false);
-    request->controls().set(controls::ExposureTime, 10000);
-    request->controls().set(controls::AnalogueGain, 2.0f);
-
-    camera->start();
-
-    camera->queueRequest(request.get());
-
-    // Wait for completion
     {
-        std::unique_lock<std::mutex> lock(mutex_);
+        auto cameras = cm.cameras();
 
-        cv_.wait(lock, [] {
-            return captureDone;
-        });
+        if (cameras.empty()) {
+            std::cerr << "No cameras found\n";
+            return -1;
+        }
+
+        auto camera = cameras[0];
+
+        camera->acquire();
+
+        auto config =
+            camera->generateConfiguration({ StreamRole::StillCapture });
+
+        camera->configure(config.get());
+        Stream *stream = config->at(0).stream();
+        // Buffers
+        std::unique_ptr<FrameBufferAllocator> allocator =
+        std::make_unique<FrameBufferAllocator>(camera);
+
+        allocator->allocate(stream);
+
+        const auto &buffers = allocator->buffers(stream);
+
+        // Connect completion callback
+        camera->requestCompleted.connect(requestComplete);
+
+        std::unique_ptr<Request> request =
+            camera->createRequest();
+
+        request->addBuffer(stream, buffers[0].get());
+
+        // Manual exposure settings
+        request->controls().set(controls::AeEnable, false);
+        request->controls().set(controls::ExposureTime, 10000);
+        request->controls().set(controls::AnalogueGain, 2.0f);
+
+        camera->start();
+
+        camera->queueRequest(request.get());
+
+        // Wait for completion
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+
+            cv_.wait(lock, [] {
+                return captureDone;
+            });
+        }
+
+        std::cout << "Request fully processed\n";
+
+        cm.stop();
+        camera->stop();
+        request.reset();      // destroy requests
+        allocator.reset();    // destroy buffer allocator
+        camera->release();
+        camera.reset();       // release shared_ptr
     }
-
-    std::cout << "Request fully processed\n";
-
-    cm.stop();
-    camera->stop();
-    request.reset();      // destroy requests
-    allocator.reset();    // destroy buffer allocator
-    camera->release();
-    camera.reset();       // release shared_ptr
+    
     cm.stop();
 
     return 0;
