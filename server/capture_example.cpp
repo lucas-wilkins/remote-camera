@@ -1,5 +1,7 @@
 #include <libcamera/libcamera.h>
 #include <libcamera/control_ids.h>
+#include <libcamera/framebuffer_allocator.h>
+#include <libcamera/framebuffer.h>
 
 #include <iostream>
 #include <memory>
@@ -47,12 +49,23 @@ int main()
         camera->generateConfiguration({ StreamRole::StillCapture });
 
     camera->configure(config.get());
+    Stream *stream = config->at(0).stream();
+
+    // Buffers
+    std::unique_ptr<FrameBufferAllocator> allocator =
+    std::make_unique<FrameBufferAllocator>(camera);
+
+    allocator->allocate(stream);
+
+    const auto &buffers = allocator->buffers(stream);
 
     // Connect completion callback
     camera->requestCompleted.connect(requestComplete);
 
     std::unique_ptr<Request> request =
         camera->createRequest();
+
+    request->addBuffer(stream, buffers[0].get());
 
     // Manual exposure settings
     request->controls().set(controls::AeEnable, false);
