@@ -10,6 +10,11 @@ cd server/build
 cmake ..
 
 # Build the project
-cmake --build .
+if ! cmake --build .; then
+    echo "Build failed. Exiting."
+    exit 1
+fi
 
 cd ~/remote-camera
+
+./server/build/test_capture
