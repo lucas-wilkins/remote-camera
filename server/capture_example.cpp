@@ -87,9 +87,12 @@ int main()
 
     std::cout << "Request fully processed\n";
 
+    cm.stop();
     camera->stop();
+    request.reset();      // destroy requests
+    allocator.reset();    // destroy buffer allocator
     camera->release();
-
+    camera.reset();       // release shared_ptr
     cm.stop();
 
     return 0;
