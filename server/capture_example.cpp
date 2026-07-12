@@ -22,6 +22,9 @@ void requestComplete(Request *request)
         return;
 
     for (const auto &[stream, buffer] : request->buffers()) {
+
+        const auto &metadata = buffer->metadata();
+
         for (unsigned int i = 0; i < buffer->planes().size(); i++) {
             const FrameBuffer::Plane &plane = buffer->planes()[i];
 
@@ -37,8 +40,10 @@ void requestComplete(Request *request)
                 continue;
             }
 
+            size_t n_bytes = metadata.planes()[i].bytesused;
+
             std::ofstream out("image.bin", std::ios::binary);
-            out.write(static_cast<char *>(memory), plane.bytesused);
+            out.write(static_cast<char *>(memory), n_bytes);
 
             munmap(memory, plane.length);
         }
