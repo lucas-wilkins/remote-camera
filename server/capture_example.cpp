@@ -102,7 +102,7 @@ int main()
         camera->acquire();
 
         auto config =
-            camera->generateConfiguration({ StreamRole::StillCapture });
+            camera->generateConfiguration({ StreamRole::Raw });
 
         camera->configure(config.get());
         Stream *stream = config->at(0).stream();
