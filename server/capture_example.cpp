@@ -104,7 +104,22 @@ int main()
         auto config =
             camera->generateConfiguration({ StreamRole::Raw });
 
-        camera->configure(config.get());
+        CameraConfiguration::Status status = config->validate();
+
+        if (status == CameraConfiguration::Invalid) {
+            std::cerr << "Configuration is invalid\n";
+            return -1;
+        }
+
+        if (status == CameraConfiguration::Adjusted)
+            std::cout << "Configuration was adjusted\n";
+
+        int ret = camera->configure(config.get());
+        if (ret) {
+            std::cerr << "configure() failed: " << ret << '\n';
+            return ret;
+        }
+
         Stream *stream = config->at(0).stream();
 
         // Info about format
