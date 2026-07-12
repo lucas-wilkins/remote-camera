@@ -106,6 +106,17 @@ int main()
 
         camera->configure(config.get());
         Stream *stream = config->at(0).stream();
+
+        // Info about format
+        const auto &cfg = config->at(0);
+
+        std::cout << "Size: "
+                  << cfg.size.width << " x "
+                  << cfg.size.height << '\n';
+
+        std::cout << "Pixel format: "
+                  << cfg.pixelFormat.toString() << '\n';
+
         // Buffers
         std::unique_ptr<FrameBufferAllocator> allocator =
         std::make_unique<FrameBufferAllocator>(camera);
