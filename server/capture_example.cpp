@@ -132,6 +132,9 @@ int main()
         std::cout << "Pixel format: "
                   << cfg.pixelFormat.toString() << '\n';
 
+        std::cout << "Stride: "
+                  << config->at(0).stride << '\n';
+
         // Buffers
         std::unique_ptr<FrameBufferAllocator> allocator =
         std::make_unique<FrameBufferAllocator>(camera);
