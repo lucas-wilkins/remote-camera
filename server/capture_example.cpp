@@ -7,6 +7,8 @@
 #include <memory>
 #include <condition_variable>
 #include <mutex>
+#include <fstream>
+#include <sys/mman.h>
 
 using namespace libcamera;
 
@@ -19,7 +21,28 @@ void requestComplete(Request *request)
     if (request->status() == Request::RequestCancelled)
         return;
 
-    std::cout << "Capture completed!" << std::endl;
+    for (const auto &[stream, buffer] : request->buffers()) {
+        for (unsigned int i = 0; i < buffer->planes().size(); i++) {
+            const FrameBuffer::Plane &plane = buffer->planes()[i];
+
+            void *memory = mmap(nullptr,
+                                plane.length,
+                                PROT_READ,
+                                MAP_SHARED,
+                                plane.fd.get(),
+                                0);
+
+            if (memory == MAP_FAILED) {
+                perror("mmap");
+                continue;
+            }
+
+            std::ofstream out("image.bin", std::ios::binary);
+            out.write(static_cast<char *>(memory), plane.bytesused);
+
+            munmap(memory, plane.length);
+        }
+    }
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
