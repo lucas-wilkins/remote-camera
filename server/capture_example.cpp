@@ -23,7 +23,34 @@ void requestComplete(Request *request)
 
     for (const auto &[stream, buffer] : request->buffers()) {
 
-        const auto &metadata = buffer->metadata();
+        const FrameMetadata &metadata = buffer->metadata();
+
+        std::cout << "=== Frame Metadata ===\n";
+        std::cout << "Status: ";
+
+        switch (metadata.status) {
+        case FrameMetadata::FrameSuccess:
+            std::cout << "Success";
+            break;
+        case FrameMetadata::FrameError:
+            std::cout << "Error";
+            break;
+        case FrameMetadata::FrameCancelled:
+            std::cout << "Cancelled";
+            break;
+        }
+
+        std::cout << "\nSequence: " << metadata.sequence;
+        std::cout << "\nTimestamp: " << metadata.timestamp << " ns";
+
+        std::cout << "\nPlanes:\n";
+        for (size_t i = 0; i < metadata.planes().size(); ++i) {
+            const auto &plane = metadata.planes()[i];
+            std::cout << "  Plane " << i
+                      << ": bytesused=" << plane.bytesused << '\n';
+        }
+
+        std::cout << "======================\n";
 
         for (unsigned int i = 0; i < buffer->planes().size(); i++) {
             const FrameBuffer::Plane &plane = buffer->planes()[i];
