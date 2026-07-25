@@ -1,5 +1,12 @@
+#include <libcamera/libcamera.h>
+#include <libcamera/control_ids.h>
+#include <libcamera/framebuffer_allocator.h>
+#include <libcamera/framebuffer.h>
+
 #include <iostream>
 #include <thread>
+#include <fstream>
+#include <sys/mman.h>
 
 #include "lib/cxxopts.hpp"
 
@@ -18,6 +25,19 @@ public:
     void sendData(int client_fd, int data) override
     {
         std::string s = std::format("Sending from buffer {}", data);
+        write_all(client_fd, s);
+    }
+};
+
+class FrameBufferDataServer : DataServer<libcamera::FrameBuffer*, BUFFER_SIZE>
+{
+    FrameBufferDataServer(int port, BufferSystem<libcamera::FrameBuffer*, BUFFER_SIZE>* data) :
+        DataServer<libcamera::FrameBuffer*, BUFFER_SIZE>(port, data) {};
+    ~FrameBufferDataServer() = default;
+
+    void sendData(int client_fd, libcamera::FrameBuffer* data) override
+    {
+        std::string s = "Test data send";
         write_all(client_fd, s);
     }
 };
