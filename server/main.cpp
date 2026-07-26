@@ -136,6 +136,8 @@ int main(int argc, char* argv[]) {
 
         const auto &buffers = allocator->buffers(stream);
 
+        std::cout << "Buffer Count: "
+                  << cfg.bufferCount << '\n';
 
         /* Initialise buffers */
         int buffer_data[BUFFER_SIZE];
