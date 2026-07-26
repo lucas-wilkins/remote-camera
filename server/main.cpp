@@ -174,11 +174,24 @@ int main(int argc, char* argv[]) {
         //bufferSystemTest();
 
         /* Wait until ctrl-C pressed */
-        std::signal(SIGINT, sigintListener);
-        while (mainLoopRunning)
-        {
-            std::this_thread::sleep_for(std::chrono::hours(24));
-        }
+        sigset_t set;
+        sigemptyset(&set);
+        sigaddset(&set, SIGINT);
+
+        // Block SIGINT in this thread.
+        pthread_sigmask(SIG_BLOCK, &set, nullptr);
+
+        // Wait until Ctrl+C is pressed.
+        int sig;
+        sigwait(&set, &sig);
+
+        std::cout << "Ctrl+C pressed, exiting ...\n";
+
+        camera->stop();
+        // request.reset();      // destroy requests
+        allocator.reset();    // destroy buffer allocator
+        camera->release();
+        camera.reset();       // release shared_ptr
     }
 
     camera_manager.stop();

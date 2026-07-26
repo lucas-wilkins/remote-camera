@@ -17,4 +17,4 @@ fi
 
 cd ~/remote-camera
 
-./server/build/test_capture
+./server/build/server
