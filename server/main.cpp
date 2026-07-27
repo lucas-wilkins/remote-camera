@@ -43,6 +43,32 @@ class FrameBufferDataServer : DataServer<libcamera::FrameBuffer*, BUFFER_SIZE>
     }
 };
 
+/** Callback: Things to do when a request completes */
+void requestComplete(libcamera::Request *request)
+{
+    if (request->status() == libcamera::Request::RequestCancelled)
+        return;
+
+    const libcamera::ControlList &metadata = request->metadata();
+
+    if (metadata.contains(libcamera::controls::FrameDuration.id())) {
+        int64_t frameDuration =
+            metadata.get(libcamera::controls::FrameDuration).value();
+
+        std::cout << "Frame duration: "
+                  << frameDuration << " us\n";
+    }
+
+    if (metadata.contains(libcamera::controls::ExposureTime.id())) {
+        int64_t exposure =
+            metadata.get(libcamera::controls::ExposureTime).value();
+
+        std::cout << "Exposure: "
+                  << exposure << " us\n";
+    }
+}
+
+
 /* Stuff for controlling main program loop */
 std::atomic<bool> mainLoopRunning{true};
 void sigintListener(int) {

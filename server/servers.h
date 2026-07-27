@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <format>
+#include <syncstream>
 
 #include "rc_utils.h"
 
@@ -228,7 +229,7 @@ inline void TCPServer::run() {
 
     while (running_)
     {
-        std::cout << "TCP server listening on port " << port_ << std::endl;
+        std::osyncstream(std::cout) << "TCP server listening on port " << port_ << std::endl;
 
         int client_fd = accept(server_fd, (sockaddr*)&client, &client_len);
         if (client_fd < 0) {
@@ -237,11 +238,11 @@ inline void TCPServer::run() {
         }
         connected_ = true;
 
-        std::cout << "Client Connected" << std::endl;
+        std::cout << "Client Connected\n";
 
         mainLoop(client_fd);
 
-        std::cout << "Client Disconnected" << std::endl;
+        std::cout << "Client Disconnected\n";
 
 
         close(client_fd);
