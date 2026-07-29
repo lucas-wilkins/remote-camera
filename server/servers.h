@@ -107,7 +107,7 @@ std::optional<T> BufferSystem<T>::pushStart()
         if (length < n)
         {
             std::size_t pos = (start + length) % n;
-            return data[pos];
+            return data->at(pos);
         }
 
         return std::nullopt;
