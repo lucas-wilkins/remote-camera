@@ -17,7 +17,7 @@
 #include "rc_utils.h"
 
 
-class IntDataServer : DataServer<int>
+class IntDataServer : public DataServer<int>
 {
 public:
     IntDataServer(int port, BufferSystem<int>* data) : DataServer<int>(port, data) {};
@@ -30,7 +30,7 @@ public:
     }
 };
 
-class FrameBufferDataServer : DataServer<libcamera::FrameBuffer*>
+class FrameBufferDataServer : public DataServer<libcamera::FrameBuffer*>
 {
     FrameBufferDataServer(int port, BufferSystem<libcamera::FrameBuffer*>* data) :
         DataServer<libcamera::FrameBuffer*>(port, data) {};
