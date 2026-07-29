@@ -25,11 +25,11 @@
  * Buffer system
  */
 
-template <typename T, std::size_t N>
+template <typename T>
 class BufferSystem
 {
 public:
-    BufferSystem(T initial_data[N]);
+    BufferSystem(std::vector<T>* initial_data);
     ~BufferSystem() = default;
 
     T popStart();
@@ -41,7 +41,8 @@ public:
     std::size_t size();
 
 private:
-    T data[N];
+    std::vector<T>* data;
+    std::size_t n;
     std::size_t start = 0;
     std::size_t length = 0;
 
@@ -50,16 +51,16 @@ private:
 
 };
 
-template <typename T, std::size_t N>
-BufferSystem<T, N>::BufferSystem(T initial_data[N])
+template <typename T>
+BufferSystem<T>::BufferSystem(std::vector<T>* initial_data)
 {
-    // Copy the data over
-    std::copy(initial_data, initial_data + N, data);
+    data = initial_data;
+    n = data->size();
 }
 
 
-template <typename T, std::size_t N>
-T BufferSystem<T, N>::popStart()
+template <typename T>
+T BufferSystem<T>::popStart()
 {
     // Wait for the size to be > 0
     {
@@ -74,8 +75,8 @@ T BufferSystem<T, N>::popStart()
     }
 }
 
-template <typename T, std::size_t N>
-void BufferSystem<T, N>::popFinish()
+template <typename T>
+void BufferSystem<T>::popFinish()
 {
     {
         // Lock the buffer size
@@ -87,7 +88,7 @@ void BufferSystem<T, N>::popFinish()
         }
 
         // Move the start variable up, and length down
-        start = (start + 1) % N;
+        start = (start + 1) % n;
         length--;
 
     }
@@ -95,17 +96,17 @@ void BufferSystem<T, N>::popFinish()
 }
 
 
-template <typename T, std::size_t N>
-std::optional<T> BufferSystem<T, N>::pushStart()
+template <typename T>
+std::optional<T> BufferSystem<T>::pushStart()
 {
     {
         // Lock whilst doing the checking, and working out of position
         std::unique_lock<std::mutex> lock(mtxSizeChange);
 
         // return optional in case buffer is full
-        if (length < N)
+        if (length < n)
         {
-            std::size_t pos = (start + length) % N;
+            std::size_t pos = (start + length) % n;
             return data[pos];
         }
 
@@ -114,8 +115,8 @@ std::optional<T> BufferSystem<T, N>::pushStart()
     }
 }
 
-template <typename T, std::size_t N>
-void BufferSystem<T, N>::pushFinish()
+template <typename T>
+void BufferSystem<T>::pushFinish()
 {
     {
         // Lock the buffer size
@@ -127,8 +128,8 @@ void BufferSystem<T, N>::pushFinish()
     cvHasData.notify_one();
 }
 
-template <typename T, std::size_t N>
-std::size_t BufferSystem<T, N>::size()
+template <typename T>
+std::size_t BufferSystem<T>::size()
 {
     {
         std::unique_lock<std::mutex> lock(mtxSizeChange);
@@ -389,28 +390,28 @@ inline void ControlServer::mainLoop(int client_fd)
  * Control Server
  */
 
-template <typename T, std::size_t N>
+template <typename T>
 class DataServer : public TCPServer
 {
 public:
-    DataServer(int port, BufferSystem<T, N>* buffer_system);
+    DataServer(int port, BufferSystem<T>* buffer_system);
 
 
     void mainLoop(int client_fd) override;
     virtual void sendData(int client_fd, T data) = 0;
 
 private:
-    BufferSystem<T, N>* buffer_system_;
+    BufferSystem<T>* buffer_system_;
 };
 
-template <typename T, std::size_t N>
-DataServer<T, N>::DataServer(int port, BufferSystem<T, N>* buffer_system) : TCPServer(port)
+template <typename T>
+DataServer<T>::DataServer(int port, BufferSystem<T>* buffer_system) : TCPServer(port)
 {
     buffer_system_ = buffer_system;
 }
 
-template <typename T, std::size_t N>
-void DataServer<T, N>::mainLoop(int client_fd)
+template <typename T>
+void DataServer<T>::mainLoop(int client_fd)
 {
     while (running_)
     {

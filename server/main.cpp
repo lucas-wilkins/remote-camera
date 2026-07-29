@@ -7,6 +7,7 @@
 #include <thread>
 #include <fstream>
 #include <csignal>
+#include <numeric>
 #include <sys/mman.h>
 
 #include "lib/cxxopts.hpp"
@@ -15,12 +16,11 @@
 #include "servers.h"
 #include "rc_utils.h"
 
-#define BUFFER_SIZE 4
 
-class IntDataServer : DataServer<int, BUFFER_SIZE>
+class IntDataServer : DataServer<int>
 {
 public:
-    IntDataServer(int port, BufferSystem<int, BUFFER_SIZE>* data) : DataServer<int, BUFFER_SIZE>(port, data) {};
+    IntDataServer(int port, BufferSystem<int>* data) : DataServer<int>(port, data) {};
     ~IntDataServer() = default;
 
     void sendData(int client_fd, int data) override
@@ -30,10 +30,10 @@ public:
     }
 };
 
-class FrameBufferDataServer : DataServer<libcamera::FrameBuffer*, BUFFER_SIZE>
+class FrameBufferDataServer : DataServer<libcamera::FrameBuffer*>
 {
-    FrameBufferDataServer(int port, BufferSystem<libcamera::FrameBuffer*, BUFFER_SIZE>* data) :
-        DataServer<libcamera::FrameBuffer*, BUFFER_SIZE>(port, data) {};
+    FrameBufferDataServer(int port, BufferSystem<libcamera::FrameBuffer*>* data) :
+        DataServer<libcamera::FrameBuffer*>(port, data) {};
     ~FrameBufferDataServer() = default;
 
     void sendData(int client_fd, libcamera::FrameBuffer* data) override
@@ -69,7 +69,7 @@ void requestComplete(libcamera::Request *request)
 }
 
 
-/* Stuff for controlling main program loop */
+/** Stuff for controlling main program loop */
 std::atomic<bool> mainLoopRunning{true};
 void sigintListener(int) {
     mainLoopRunning = false;
@@ -166,14 +166,11 @@ int main(int argc, char* argv[]) {
                   << cfg.bufferCount << '\n';
 
         /* Initialise buffers */
-        int buffer_data[BUFFER_SIZE];
-        for (int i=0; i<BUFFER_SIZE; i++)
-        {
-            buffer_data[i] = i+1;
-        }
+        std::vector<int> buffer_data(10);
+        std::iota(buffer_data.begin(), buffer_data.end(), 0);
 
         /* Set up systems */
-        BufferSystem<int, BUFFER_SIZE>* buffer_system = new BufferSystem<int, 4>(buffer_data);
+        auto buffer_system = new BufferSystem<int>(&buffer_data);
 
         ControlServer control_server = ControlServer(control_port);
         IntDataServer data_server = IntDataServer(data_port, buffer_system);
