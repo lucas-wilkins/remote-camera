@@ -71,7 +71,7 @@ T BufferSystem<T>::popStart()
             return length > 0;
         });
 
-        return data[start];
+        return data->at(start);
     }
 }
 
