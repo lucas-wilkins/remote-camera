@@ -151,12 +151,12 @@ public:
 
     virtual void mainLoop(int client_fd) = 0;
     bool connected();
+    void stop();
 
 private:
     int port_;
 
     void start();
-    void stop();
     void run();
 
     std::thread worker_;
@@ -193,6 +193,8 @@ inline void TCPServer::stop() {
     if (!running_) {
         return;
     }
+
+    std::cout << "Stopping TCP Server on " << port_ << std::endl;
 
     running_ = false;
 

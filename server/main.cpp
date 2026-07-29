@@ -217,6 +217,11 @@ int main(int argc, char* argv[]) {
         allocator.reset();    // destroy buffer allocator
         camera->release();
         camera.reset();       // release shared_ptr
+
+        // Stop the servers
+
+        control_server.stop();
+        data_server.stop();
     }
 
     camera_manager.stop();
