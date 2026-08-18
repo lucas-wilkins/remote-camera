@@ -8,6 +8,7 @@
 #include <fstream>
 #include <csignal>
 #include <numeric>
+#include <utility>
 #include <sys/mman.h>
 
 #include "lib/cxxopts.hpp"
@@ -17,30 +18,49 @@
 #include "rc_utils.h"
 
 
-class IntDataServer : public DataServer<int>
+class DataServer : public TCPServer
 {
+private:
+
+    libcamera::Request* currentRequest_;
+    std::mutex mtxSend_;
+    std::condition_variable cvSend_;
+    std::function<void()> sendDoneCallback = []()
+    {
+        std::cout << "sendDoneCallback not set yet" << std::endl;
+    };
+
 public:
-    IntDataServer(int port, BufferSystem<int>* data) : DataServer<int>(port, data) {};
-    ~IntDataServer() = default;
+    DataServer(int port) : TCPServer(port) {};
+    ~DataServer() = default;
 
-    void sendData(int client_fd, int data) override
+    void sendData(libcamera::Request* request)
     {
-        std::string s = std::format("Sending from buffer {}", data);
-        write_all(client_fd, s);
+        currentRequest_ = request;
+        cvSend_.notify_one();
     }
-};
 
-class FrameBufferDataServer : public DataServer<libcamera::FrameBuffer*>
-{
-    FrameBufferDataServer(int port, BufferSystem<libcamera::FrameBuffer*>* data) :
-        DataServer<libcamera::FrameBuffer*>(port, data) {};
-    ~FrameBufferDataServer() = default;
-
-    void sendData(int client_fd, libcamera::FrameBuffer* data) override
+    void mainLoop() override
     {
-        std::string s = "Test data send";
-        write_all(client_fd, s);
+
+        while (running_)
+        {
+            std::unique_lock<std::mutex> lock(mtxSend_);
+            cvSend_.wait(lock);
+
+            write_all(getClientFd(), "[This is dummy send data]");
+
+            delete currentRequest_;
+
+            sendDoneCallback();
+        }
     }
+
+    void setSendDoneCallback(std::function<void()> callback)
+    {
+        sendDoneCallback = std::move(callback);
+    }
+
 };
 
 /** Callback: Things to do when a request completes */
@@ -75,7 +95,231 @@ void sigintListener(int) {
     mainLoopRunning = false;
 }
 
-int main(int argc, char* argv[]) {
+
+
+class Main
+{
+public:
+
+
+    int exposureTime = 10000;
+    float analogueGain = 2.0f;
+
+    libcamera::CameraManager cameraManager;
+    std::shared_ptr<libcamera::Camera> camera;
+    ControlServer* controlServer;
+    DataServer* dataServer;
+    std::unique_ptr<libcamera::FrameBufferAllocator> allocator;
+    const std::vector<std::unique_ptr<libcamera::FrameBuffer>> *buffers = nullptr;
+    libcamera::Stream* stream;
+
+    std::mutex bufferIndexMutex;
+    int bufferIndex = 0;
+    int bufferCount = 0;
+    int buffersUsed = 0;
+
+    Main(int control_port, int data_port)
+    {
+        cameraManager.start();
+
+        {
+            /* Get first camera */
+            auto cameras = cameraManager.cameras();
+
+            if (cameras.empty())
+            {
+                throw std::runtime_error("No cameras found");
+            }
+
+            camera = cameras[0];
+            camera->acquire();
+
+            /* Configure camera */
+
+            auto config =
+                camera->generateConfiguration({libcamera::StreamRole::Raw});
+
+            libcamera::CameraConfiguration::Status status = config->validate();
+
+            if (status == libcamera::CameraConfiguration::Invalid)
+            {
+                throw std::runtime_error("Configuration is invalid");
+            }
+
+            if (status == libcamera::CameraConfiguration::Adjusted)
+            {
+                std::cout << "Configuration was adjusted\n";
+            }
+
+            int ret = camera->configure(config.get());
+            if (ret)
+            {
+                throw std::runtime_error(std::format("configure() failed: {}", ret));
+            }
+
+            // Info about format
+            const auto& cfg = config->at(0);
+
+            std::cout << "Size: "
+                << cfg.size.width << " x "
+                << cfg.size.height << '\n';
+
+            std::cout << "Pixel format: "
+                << cfg.pixelFormat.toString() << '\n';
+
+            std::cout << "Stride: "
+                << cfg.stride << '\n';
+
+            /*
+             * Set up data stream and buffers for camera
+             */
+
+            stream = config->at(0).stream();
+
+            allocator =
+                std::make_unique<libcamera::FrameBufferAllocator>(camera);
+
+            allocator->allocate(stream);
+
+            buffers = &allocator->buffers(stream);
+
+
+            std::cout << "Buffer Count: "
+                << cfg.bufferCount << '\n';
+
+            camera->start();
+
+            /*
+             * Create servers and wire them up
+             */
+
+            controlServer = new ControlServer(control_port);
+            dataServer = new DataServer(data_port);
+
+            // callbacks
+            controlServer->setCaptureCallback([this]()
+            {
+                return captureCallback();
+            });
+
+            controlServer->setExposureCallback([this](int exposure)
+            {
+                return exposureCallback(exposure);
+            });
+
+            controlServer->setGainCallback([this](float gain)
+            {
+                return analogueGainCallback(gain);
+            });
+
+            controlServer->setStatusCallback([this]()
+            {
+                return statusCallback();
+            });
+
+            // Make data errors get sent to control server
+            dataServer->setErrorMessageCallback(controlServer->getErrorMessageCallback());
+            dataServer->setSendDoneCallback([this]()
+            {
+                sendDoneCallback();
+            });
+
+        }
+
+    }
+
+    ~Main()
+    {
+
+        cameraManager.stop();
+        controlServer->stop();
+        dataServer->stop();
+
+        camera->stop();
+        allocator.reset();    // destroy buffer allocator
+        camera->release();
+        camera.reset();       // release shared_ptr
+
+        delete controlServer;
+        delete dataServer;
+    }
+
+    void requestCallback(libcamera::Request* request)
+    {
+        dataServer->sendData(request);
+
+        delete request;
+    }
+
+    std::string exposureCallback(int exposure)
+    {
+        exposureTime = exposure;
+        return std::format("Set exposure time to {} microseconds", exposureTime);
+    }
+
+    std::string analogueGainCallback(float gain)
+    {
+        analogueGain = gain;
+        return std::format("Set analogue gain to {}", analogueGain);
+    }
+
+    std::string statusCallback()
+    {
+        return "Status info goes here";
+    }
+
+    std::string captureCallback()
+    {
+        int index;
+
+        // Add a request to the queue
+        {
+            std::lock_guard lock(bufferIndexMutex);
+
+            if (buffersUsed >= bufferCount)
+            {
+                return"Failed to capture, buffers all in use\n";
+            }
+
+            index = bufferIndex;
+
+            bufferIndex++;
+            bufferIndex %= bufferCount;
+            buffersUsed++;
+
+        }
+
+        /*
+        std::unique_ptr<libcamera::Request> request =
+            camera->createRequest();
+
+        request->addBuffer(stream, (*buffers)[index].get());
+
+        // Manual exposure settings
+        request->controls().set(libcamera::controls::AeEnable, false);
+        request->controls().set(libcamera::controls::ExposureTime, exposureTime);
+        request->controls().set(libcamera::controls::AnalogueGain, analogueGain);
+
+        camera->queueRequest(request.get());
+        */
+
+        return "Dummy Capture Done\n";
+    };
+
+    void sendDoneCallback()
+    {
+        {
+            std::lock_guard lock(bufferIndexMutex);
+
+            bufferCount--;
+        }
+    }
+
+};
+
+
+int main(int argc, char* argv[])
+{
     cxxopts::Options options("raw-camera", "Serves raw camera data");
 
     options.add_options()
@@ -99,104 +343,10 @@ int main(int argc, char* argv[]) {
     int control_port = result["control"].as<int>();
     int data_port = result["data"].as<int>();
 
-    /* Camera Stuff */
-
-    libcamera::CameraManager camera_manager;
-    camera_manager.start();
-
+    try
     {
+        Main main = Main(control_port, data_port);
 
-        /* Get first camera */
-        auto cameras = camera_manager.cameras();
-
-        if (cameras.empty()) {
-            std::cerr << "No cameras found\n";
-            return -1;
-        }
-
-        auto camera = cameras[0];
-
-        camera->acquire();
-
-        /* Configure camera */
-
-        auto config =
-            camera->generateConfiguration({ libcamera::StreamRole::Raw });
-
-        libcamera::CameraConfiguration::Status status = config->validate();
-
-        if (status == libcamera::CameraConfiguration::Invalid) {
-            std::cerr << "Configuration is invalid\n";
-            return -1;
-        }
-
-        if (status == libcamera::CameraConfiguration::Adjusted)
-            std::cout << "Configuration was adjusted\n";
-
-        int ret = camera->configure(config.get());
-        if (ret) {
-            std::cerr << "configure() failed: " << ret << '\n';
-            return ret;
-        }
-
-        // Info about format
-        const auto &cfg = config->at(0);
-
-        std::cout << "Size: "
-                  << cfg.size.width << " x "
-                  << cfg.size.height << '\n';
-
-        std::cout << "Pixel format: "
-                  << cfg.pixelFormat.toString() << '\n';
-
-        std::cout << "Stride: "
-                  << cfg.stride << '\n';
-
-        /* Set up data stream and buffers for camera */
-        libcamera::Stream *stream = config->at(0).stream();
-
-        std::unique_ptr<libcamera::FrameBufferAllocator> allocator =
-            std::make_unique<libcamera::FrameBufferAllocator>(camera);
-
-        allocator->allocate(stream);
-
-        const auto &buffers = allocator->buffers(stream);
-
-        std::cout << "Buffer Count: "
-                  << cfg.bufferCount << '\n';
-
-        /* Initialise buffers */
-        std::vector<int> buffer_data(10);
-        std::iota(buffer_data.begin(), buffer_data.end(), 0);
-
-        /* Set up systems */
-        auto buffer_system = new BufferSystem<int>(&buffer_data);
-
-        ControlServer control_server = ControlServer(control_port);
-        IntDataServer data_server = IntDataServer(data_port, buffer_system);
-
-        std::function<std::string(void)> capture_callback = [buffer_system]()
-        {
-            buffer_system->pushStart();
-            buffer_system->pushFinish();
-            return "Dummy Capture Done\n";
-        };
-
-        control_server.setCaptureCallback(capture_callback);
-
-
-        // data_server->bind_control_server(control_server);
-        // control_server->bind_data_server(data_server);
-        //
-        // control_server->start();
-        // data_server->start();
-        //
-        // std::this_thread::sleep_for(std::chrono::seconds(5));
-        //
-        // control_server->stop();
-        // data_server->stop();
-
-        //bufferSystemTest();
 
         /* Wait until ctrl-C pressed */
         sigset_t set;
@@ -212,19 +362,9 @@ int main(int argc, char* argv[]) {
 
         std::cout << "Ctrl+C pressed, exiting ...\n";
 
-        camera->stop();
-        // request.reset();      // destroy requests
-        allocator.reset();    // destroy buffer allocator
-        camera->release();
-        camera.reset();       // release shared_ptr
-
-        // Stop the servers
-
-        control_server.stop();
-        data_server.stop();
+    } catch (const std::runtime_error e)
+    {
+        std::cerr << e.what() << '\n';
     }
 
-    camera_manager.stop();
-
-    return 0;
 }

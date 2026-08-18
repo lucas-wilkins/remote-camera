@@ -22,122 +22,6 @@
 
 
 /*
- * Buffer system
- */
-
-template <typename T>
-class BufferSystem
-{
-public:
-    BufferSystem(std::vector<T>* initial_data);
-    ~BufferSystem() = default;
-
-    T popStart();
-    void popFinish();
-
-    std::optional<T> pushStart();
-    void pushFinish();
-
-    std::size_t size();
-
-private:
-    std::vector<T>* data;
-    std::size_t n;
-    std::size_t start = 0;
-    std::size_t length = 0;
-
-    std::mutex mtxSizeChange;
-    std::condition_variable cvHasData;
-
-};
-
-template <typename T>
-BufferSystem<T>::BufferSystem(std::vector<T>* initial_data)
-{
-    data = initial_data;
-    n = data->size();
-}
-
-
-template <typename T>
-T BufferSystem<T>::popStart()
-{
-    // Wait for the size to be > 0
-    {
-        std::unique_lock<std::mutex> lock(mtxSizeChange);
-
-        cvHasData.wait(lock, [this]
-        {
-            return length > 0;
-        });
-
-        return data->at(start);
-    }
-}
-
-template <typename T>
-void BufferSystem<T>::popFinish()
-{
-    {
-        // Lock the buffer size
-        std::unique_lock<std::mutex> lock(mtxSizeChange);
-
-        if (length == 0)
-        {
-            throw std::runtime_error("No data in array, cannot finish (popFinish called on empty array)");
-        }
-
-        // Move the start variable up, and length down
-        start = (start + 1) % n;
-        length--;
-
-    }
-
-}
-
-
-template <typename T>
-std::optional<T> BufferSystem<T>::pushStart()
-{
-    {
-        // Lock whilst doing the checking, and working out of position
-        std::unique_lock<std::mutex> lock(mtxSizeChange);
-
-        // return optional in case buffer is full
-        if (length < n)
-        {
-            std::size_t pos = (start + length) % n;
-            return data->at(pos);
-        }
-
-        return std::nullopt;
-
-    }
-}
-
-template <typename T>
-void BufferSystem<T>::pushFinish()
-{
-    {
-        // Lock the buffer size
-        std::unique_lock<std::mutex> lock(mtxSizeChange);
-        length++;
-    }
-
-    // Trigger any waiting threads
-    cvHasData.notify_one();
-}
-
-template <typename T>
-std::size_t BufferSystem<T>::size()
-{
-    {
-        std::unique_lock<std::mutex> lock(mtxSizeChange);
-        return length;
-    }
-}
-
-/*
  * TCP server base class
  *
  */
@@ -149,9 +33,14 @@ public:
     explicit TCPServer(int port);
     ~TCPServer();
 
-    virtual void mainLoop(int client_fd) = 0;
+    virtual void mainLoop() = 0;
     bool connected();
     void stop();
+
+    void setErrorMessageCallback(std::function<void(std::string)> callback);
+    std::function<void(std::string)> getErrorMessageCallback();
+
+    int getClientFd();
 
 private:
     int port_;
@@ -159,9 +48,17 @@ private:
     void start();
     void run();
 
+    int client_fd_;
+
     std::thread worker_;
 
     bool connected_ = false;
+
+    std::function<void(std::string)> errorMessageCallback_ = [this](std::string msg)
+    {
+        write_all(client_fd_, msg);
+        std::cerr << msg << std::endl;
+    };
 
 
 protected:
@@ -172,6 +69,7 @@ protected:
 inline TCPServer::TCPServer(int port)
 {
     port_ = port;
+    client_fd_ = 0;
     start();
 }
 
@@ -243,7 +141,7 @@ inline void TCPServer::run() {
 
         std::cout << "Client Connected\n";
 
-        mainLoop(client_fd);
+        mainLoop();
 
         std::cout << "Client Disconnected\n";
 
@@ -254,6 +152,22 @@ inline void TCPServer::run() {
     std::cout << "Control server stopped\n";
 
 }
+
+inline int TCPServer::getClientFd()
+{
+    return client_fd_;
+}
+
+inline void TCPServer::setErrorMessageCallback(std::function<void(std::string)> callback)
+{
+    errorMessageCallback_ = callback;
+}
+
+inline std::function<void(std::string)> TCPServer::getErrorMessageCallback()
+{
+    return errorMessageCallback_;
+}
+
 
 /*
  * Control Server
@@ -266,7 +180,7 @@ public:
 
     using TCPServer::TCPServer;
 
-    void mainLoop(int client_fd) override;
+    void mainLoop() override;
     void setExposureCallback(std::function<std::string(int64_t)> callback);
     void setGainCallback(std::function<std::string(float)> callback);
     void setCaptureCallback(std::function<std::string()> callback);
@@ -322,12 +236,12 @@ inline void ControlServer::setStatusCallback(std::function<std::string()> callba
 }
 
 
-inline void ControlServer::mainLoop(int client_fd)
+inline void ControlServer::mainLoop()
 {
 
 
     ssize_t n;
-    while ((n = read(client_fd, buffer, sizeof(buffer))) > 0) {
+    while ((n = read(getClientFd(), buffer, sizeof(buffer))) > 0) {
         int message_type = buffer[0];
 
         std::string msg;
@@ -380,51 +294,11 @@ inline void ControlServer::mainLoop(int client_fd)
             }
         }
 
-        write_all(client_fd, response);
+        write_all(getClientFd(), response);
         std::cout << response << std::endl;
     }
 
 
 }
-
-
-/*
- * Control Server
- */
-
-template <typename T>
-class DataServer : public TCPServer
-{
-public:
-    DataServer(int port, BufferSystem<T>* buffer_system);
-
-
-    void mainLoop(int client_fd) override;
-    virtual void sendData(int client_fd, T data) = 0;
-
-private:
-    BufferSystem<T>* buffer_system_;
-};
-
-template <typename T>
-DataServer<T>::DataServer(int port, BufferSystem<T>* buffer_system) : TCPServer(port)
-{
-    buffer_system_ = buffer_system;
-}
-
-template <typename T>
-void DataServer<T>::mainLoop(int client_fd)
-{
-    while (running_)
-    {
-        T target = buffer_system_->popStart();
-        sendData(client_fd, target);
-        buffer_system_->popFinish();
-    }
-}
-
-
-
-
 
 #endif //SERVER_SERVERS_H
