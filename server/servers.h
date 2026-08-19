@@ -244,6 +244,8 @@ inline void ControlServer::mainLoop()
     while ((n = read(getClientFd(), buffer, sizeof(buffer))) > 0) {
         int message_type = buffer[0];
 
+        std::cout << "Received message " << message_type << std::endl;
+
         std::string msg;
         std::string response;
 
