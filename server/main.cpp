@@ -196,6 +196,7 @@ public:
             controlServer = new ControlServer(control_port);
             dataServer = new DataServer(data_port);
 
+            /*
             // callbacks
             controlServer->setCaptureCallback([this]()
             {
@@ -216,6 +217,7 @@ public:
             {
                 return statusCallback();
             });
+            */
 
             // Make data errors get sent to control server
             dataServer->setErrorMessageCallback(controlServer->getErrorMessageCallback());
