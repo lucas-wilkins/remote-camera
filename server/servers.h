@@ -240,6 +240,8 @@ inline void ControlServer::mainLoop()
 {
 
 
+    std::cout << "Control Server mainLoop" << std::endl;
+
     ssize_t n;
     while ((n = read(getClientFd(), buffer, sizeof(buffer))) > 0) {
         int message_type = buffer[0];

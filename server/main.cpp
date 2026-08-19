@@ -43,6 +43,7 @@ public:
     void mainLoop() override
     {
 
+        std::cout << "Data Server mainLoop" << std::endl;
         while (running_)
         {
             std::unique_lock<std::mutex> lock(mtxSend_);
