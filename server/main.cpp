@@ -82,7 +82,6 @@ class MessageServer : public SendServer<std::string>
 {
 public:
     MessageServer(int port) : SendServer(port) {};
-    ~MessageServer();
 
     void sendFunction(std::string* data) override
     {
@@ -95,7 +94,6 @@ class DataServer : public SendServer<libcamera::Request>
 {
 public:
     DataServer(int port) : SendServer(port) {};
-    ~DataServer();
 
     void sendFunction(libcamera::Request* data) override
     {
