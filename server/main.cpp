@@ -7,8 +7,8 @@
 #include <thread>
 #include <fstream>
 #include <csignal>
-#include <utility>
 #include <sys/mman.h>
+#include <queue>
 
 #include "lib/cxxopts.hpp"
 
@@ -16,12 +16,12 @@
 #include "servers.h"
 #include "rc_utils.h"
 
-
-class DataServer : public TCPServer
+template <class T>
+class SendServer : public TCPServer
 {
 private:
 
-    libcamera::Request* currentRequest_;
+    std::queue<T*> dataQueue;
     std::mutex mtxSend_;
     std::condition_variable cvSend_;
     std::function<void()> sendDoneCallback = []()
@@ -30,12 +30,12 @@ private:
     };
 
 public:
-    DataServer(int port) : TCPServer(port) {};
-    ~DataServer() = default;
+    SendServer(int port) : TCPServer(port) {};
+    ~SendServer() = default;
 
-    void sendData(libcamera::Request* request)
+    void send(T* data)
     {
-        currentRequest_ = request;
+        dataQueue.push(data);
         cvSend_.notify_one();
     }
 
@@ -46,24 +46,24 @@ public:
         while (running_)
         {
             std::unique_lock<std::mutex> lock(mtxSend_);
-            cvSend_.wait(lock);
+            cvSend_.wait_for(lock, std::chrono::milliseconds(200));
 
             if (!running_)
             {
                 break;
             }
 
-            write_all(getClientFd(), "[This is dummy send data]");
-
-            delete currentRequest_;
-
-            sendDoneCallback();
+            while (!dataQueue.empty())
+            {
+                sendFunction(dataQueue.front());
+                dataQueue.pop();
+            }
         }
     }
 
-    void setSendDoneCallback(std::function<void()> callback)
+    virtual void sendFunction(T* data)
     {
-        sendDoneCallback = std::move(callback);
+
     }
 
     void stop() override
@@ -76,6 +76,32 @@ public:
         cvSend_.notify_one();
     }
 
+};
+
+class MessageServer : public SendServer<std::string>
+{
+public:
+    MessageServer(int port) : SendServer(port) {};
+    ~MessageServer();
+
+    void sendFunction(std::string* data) override
+    {
+        write_all(getClientFd(), *data);
+        delete data;
+    }
+};
+
+class DataServer : public SendServer<libcamera::Request>
+{
+public:
+    DataServer(int port) : SendServer(port) {};
+    ~DataServer();
+
+    void sendFunction(libcamera::Request* data) override
+    {
+        write_all(getClientFd(), "Data server test write");
+        delete data;
+    }
 };
 
 /** Callback: Things to do when a request completes */
@@ -122,8 +148,11 @@ public:
 
     libcamera::CameraManager cameraManager;
     std::shared_ptr<libcamera::Camera> camera;
+
     ControlServer* controlServer;
+    MessageServer* messageServer;
     DataServer* dataServer;
+
     std::unique_ptr<libcamera::FrameBufferAllocator> allocator;
     const std::vector<std::unique_ptr<libcamera::FrameBuffer>> *buffers = nullptr;
     libcamera::Stream* stream;
@@ -133,7 +162,7 @@ public:
     int bufferCount = 0;
     int buffersUsed = 0;
 
-    Main(int control_port, int data_port)
+    Main(int control_port, int message_port, int data_port)
     {
         cameraManager.start();
 
@@ -209,6 +238,7 @@ public:
              */
 
             controlServer = new ControlServer(control_port);
+            messageServer = new MessageServer(message_port);
             dataServer = new DataServer(data_port);
 
             /*
@@ -235,12 +265,6 @@ public:
             */
 
 
-            // Make data errors get sent to control server
-            dataServer->setErrorMessageCallback(controlServer->getErrorMessageCallback());
-            dataServer->setSendDoneCallback([this]()
-            {
-                sendDoneCallback();
-            });
 
         }
 
@@ -249,22 +273,19 @@ public:
     ~Main()
     {
 
-        cameraManager.stop();
-        controlServer->stop();
-        dataServer->stop();
+        delete controlServer;
+        delete messageServer;
+        delete dataServer;
 
         camera->stop();
         allocator.reset();    // destroy buffer allocator
         camera->release();
         camera.reset();       // release shared_ptr
-
-        delete controlServer;
-        delete dataServer;
     }
 
     void requestCallback(libcamera::Request* request)
     {
-        dataServer->sendData(request);
+        dataServer->send(request);
 
         delete request;
     }
@@ -342,9 +363,14 @@ int main(int argc, char* argv[])
 
     options.add_options()
         ("h,help", "Print usage")
-        ("c,control", "TCP port for control signals",
+        ("c,control",
+            "TCP port for control signals",
             cxxopts::value<int>()->default_value(std::to_string(DEFAULT_CONTROL_PORT)))
-        ("d,data", "TCP port for data",
+        ("m,message",
+            "TCP port for messages",
+            cxxopts::value<int>()->default_value(std::to_string(DEFAULT_MESSAGE_PORT)))
+        ("d,data",
+            "TCP port for data",
             cxxopts::value<int>()->default_value(std::to_string(DEFAULT_DATA_PORT)));
 
     auto result = options.parse(argc, argv);
@@ -360,10 +386,11 @@ int main(int argc, char* argv[])
     // Get the positional integer (uses default if not provided)
     int control_port = result["control"].as<int>();
     int data_port = result["data"].as<int>();
+    int message_port = result["message"].as<int>();
 
     try
     {
-        Main main = Main(control_port, data_port);
+        Main main = Main(control_port, message_port, data_port);
 
 
         /* Wait until ctrl-C pressed */

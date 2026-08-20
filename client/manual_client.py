@@ -9,19 +9,22 @@ import struct
 
 settings = Settings()
 
-def data_loop():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((settings.address, settings.data_port))
+def data_loop(port: int):
+    def fun():
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((settings.address, port))
 
-        while True:
-            data = s.recv(1024)
-            if len(data) > 0:
-                print(data.decode())
+            while True:
+                data = s.recv(1024)
+                if len(data) > 0:
+                    print(data.decode())
 
-            time.sleep(0.01)
+                time.sleep(0.01)
+    return fun
 
-t = threading.Thread(target=data_loop)
-t.start()
+for port in [settings.message_port, settings.data_port]:
+    t = threading.Thread(target=data_loop(port))
+    t.start()
 
 test_exposure = 12345
 test_gain = 2.3
@@ -48,13 +51,9 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 b = b + int(test_exposure).to_bytes(8, 'little')
             case 3:
                 b = b + struct.pack('f', test_gain)
+
         # Send the number
 
         print("Sending:", b)
 
         s.sendall(b)
-
-        # Get server response and print
-        print("Awaiting response:")
-        data = s.recv(1024)
-        print(data.decode())
