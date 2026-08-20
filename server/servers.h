@@ -49,7 +49,7 @@ private:
     void start();
     void run();
 
-    int client_fd_;
+    int client_fd_ = -1;
 
     std::thread worker_;
 
@@ -133,10 +133,10 @@ inline void TCPServer::run() {
     {
         std::osyncstream(std::cout) << "TCP server listening on port " << port_ << std::endl;
 
-        int client_fd = accept(server_fd, (sockaddr*)&client, &client_len);
-        if (client_fd < 0) {
+        client_fd_ = accept(server_fd, (sockaddr*)&client, &client_len);
+        if (client_fd_ < 0) {
             perror("accept");
-            return;
+            continue;
         }
         connected_ = true;
 
@@ -147,7 +147,7 @@ inline void TCPServer::run() {
         std::cout << "Client Disconnected\n";
 
 
-        close(client_fd);
+        close(client_fd_);
     }
 
     std::cout << "Control server stopped\n";
@@ -246,7 +246,7 @@ inline void ControlServer::mainLoop()
 {
 
 
-    std::cout << "Control Server mainLoop" << std::endl;
+    // std::cout << "Control Server mainLoop" << std::endl;
 
     ssize_t n;
     while ((n = read(getClientFd(), buffer, sizeof(buffer))) > 0) {
