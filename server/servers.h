@@ -97,9 +97,9 @@ inline void TCPServer::stop() {
 
     running_ = false;
 
-    // if (worker_.joinable()) {
-    //     worker_.join();
-    // }
+    if (worker_.joinable()) {
+        worker_.join();
+    }
 }
 
 inline void TCPServer::run() {

@@ -239,7 +239,7 @@ public:
             messageServer = new MessageServer(message_port);
             dataServer = new DataServer(data_port);
 
-            /*
+
             // callbacks
             controlServer->setCaptureCallback([this]()
             {
@@ -260,7 +260,7 @@ public:
             {
                 return statusCallback();
             });
-            */
+
 
 
 
@@ -302,7 +302,7 @@ public:
 
     std::string statusCallback()
     {
-        return "Status info goes here";
+        return std::format("Free buffers {}/{}", buffersUsed, bufferCount);
     }
 
     std::string captureCallback()
