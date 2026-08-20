@@ -50,11 +50,11 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 b = b + struct.pack('f', test_gain)
         # Send the number
 
-        print(b)
+        print("Sending:", b)
 
         s.sendall(b)
 
         # Get server response and print
-
+        print("Awaiting response:")
         data = s.recv(1024)
         print(data.decode())

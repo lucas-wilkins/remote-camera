@@ -7,7 +7,6 @@
 #include <thread>
 #include <fstream>
 #include <csignal>
-#include <numeric>
 #include <utility>
 #include <sys/mman.h>
 
@@ -49,6 +48,11 @@ public:
             std::unique_lock<std::mutex> lock(mtxSend_);
             cvSend_.wait(lock);
 
+            if (!running_)
+            {
+                break;
+            }
+
             write_all(getClientFd(), "[This is dummy send data]");
 
             delete currentRequest_;
@@ -60,6 +64,13 @@ public:
     void setSendDoneCallback(std::function<void()> callback)
     {
         sendDoneCallback = std::move(callback);
+    }
+
+    void stop() override
+    {
+        // TODO: Does this work, doesn't join worker thread explicitly????
+        running_ = false;
+        cvSend_.notify_one();
     }
 
 };
@@ -197,7 +208,7 @@ public:
             controlServer = new ControlServer(control_port);
             dataServer = new DataServer(data_port);
 
-
+            /*
             // callbacks
             controlServer->setCaptureCallback([this]()
             {
@@ -218,6 +229,7 @@ public:
             {
                 return statusCallback();
             });
+            */
 
 
             // Make data errors get sent to control server

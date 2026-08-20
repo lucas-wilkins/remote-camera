@@ -35,7 +35,7 @@ public:
 
     virtual void mainLoop() = 0;
     bool connected();
-    void stop();
+    virtual void stop();
 
     void setErrorMessageCallback(std::function<void(std::string)> callback);
     std::function<void(std::string)> getErrorMessageCallback();
@@ -298,8 +298,8 @@ inline void ControlServer::mainLoop()
             }
         }
 
-        write_all(getClientFd(), response);
         std::cout << response << std::endl;
+        write_all(getClientFd(), response);
     }
 
 
