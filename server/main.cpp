@@ -69,6 +69,9 @@ public:
     void stop() override
     {
         // TODO: Does this work, doesn't join worker thread explicitly????
+
+        std::cout << std::format("Stopping TCP Server on {}\n", getPort());
+
         running_ = false;
         cvSend_.notify_one();
     }

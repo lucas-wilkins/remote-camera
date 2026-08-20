@@ -41,6 +41,7 @@ public:
     std::function<void(std::string)> getErrorMessageCallback();
 
     int getClientFd();
+    int getPort();
 
 private:
     int port_;
@@ -156,6 +157,11 @@ inline void TCPServer::run() {
 inline int TCPServer::getClientFd()
 {
     return client_fd_;
+}
+
+inline int TCPServer::getPort()
+{
+    return port_;
 }
 
 inline void TCPServer::setErrorMessageCallback(std::function<void(std::string)> callback)
