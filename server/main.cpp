@@ -45,8 +45,10 @@ public:
         std::cout << "Data Server mainLoop" << std::endl;
         while (running_)
         {
-            std::unique_lock<std::mutex> lock(mtxSend_);
-            cvSend_.wait_for(lock, std::chrono::milliseconds(200));
+            {
+                std::unique_lock<std::mutex> lock(mtxSend_);
+                cvSend_.wait_for(lock, std::chrono::milliseconds(200));
+            }
 
             if (!running_)
             {
@@ -109,6 +111,7 @@ public:
 };
 
 /** Callback: Things to do when a request completes */
+/*
 void requestComplete(libcamera::Request *request)
 {
     if (request->status() == libcamera::Request::RequestCancelled)
@@ -131,7 +134,7 @@ void requestComplete(libcamera::Request *request)
         std::cout << "Exposure: "
                   << exposure << " us\n";
     }
-}
+}*/
 
 
 /** Stuff for controlling main program loop */
@@ -231,6 +234,16 @@ public:
 
             buffers = &allocator->buffers(stream);
 
+            // camera->requestCompleted.connect([this](libcamera::Request* request)
+            // {
+            //     requestCallback(request);
+            // });
+
+            camera->requestCompleted.connect(
+                this,
+                &Main::requestCallback
+            );
+
             std::cout << "Buffer Count: "
                 << cfg.bufferCount << '\n';
             bufferCount = cfg.bufferCount;
@@ -246,7 +259,7 @@ public:
             dataServer = new DataServer(data_port);
 
 
-            // callbacks
+            // Control server callbacks
             controlServer->setCaptureCallback([this]()
             {
                 return captureCallback();
@@ -293,8 +306,6 @@ public:
     void requestCallback(libcamera::Request* request)
     {
         dataServer->send(request);
-
-        delete request;
     }
 
     std::string exposureCallback(int exposure)
@@ -335,7 +346,7 @@ public:
 
         }
 
-        /*
+
         std::unique_ptr<libcamera::Request> request =
             camera->createRequest();
 
@@ -347,9 +358,8 @@ public:
         request->controls().set(libcamera::controls::AnalogueGain, analogueGain);
 
         camera->queueRequest(request.get());
-        */
 
-        return "Dummy Capture Done\n";
+        return "Capture Requested\n";
     };
 
     void sendDoneCallback()
