@@ -105,6 +105,7 @@ inline void TCPServer::stop() {
     running_ = false;
 
     if (worker_.joinable()) {
+        std::cout << "Joining TCP server worker thread\n";
         worker_.join();
     }
 }
@@ -198,6 +199,7 @@ public:
     void setGainCallback(std::function<std::string(float)> callback);
     void setCaptureCallback(std::function<std::string()> callback);
     void setStatusCallback(std::function<std::string()> callback);
+    void setResponseCallback(std::function<void(std::string)> callback);
 
 
 private:
@@ -223,6 +225,11 @@ private:
     {
         return "No status callback set";
     };
+
+    std::function<void(std::string)> responseCallback_ = [](std::string msg)
+    {
+        return;
+    };
 };
 
 
@@ -236,16 +243,19 @@ inline void ControlServer::setGainCallback(std::function<std::string(float)> cal
     gainCallback_ = callback;
 }
 
-
 inline void ControlServer::setCaptureCallback(std::function<std::string()> callback)
 {
     captureCallback_ = callback;
 }
 
-
 inline void ControlServer::setStatusCallback(std::function<std::string()> callback)
 {
     statusCallback_ = callback;
+}
+
+inline void ControlServer::setResponseCallback(std::function<void(std::string)> callback)
+{
+    responseCallback_ = callback;
 }
 
 
@@ -325,7 +335,7 @@ inline void ControlServer::mainLoop()
             }
 
             std::cout << response << std::endl;
-            write_all(getClientFd(), response);
+            responseCallback_(response);
 
         }
 

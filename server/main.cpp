@@ -21,7 +21,7 @@ class SendServer : public TCPServer
 {
 private:
 
-    std::queue<T*> dataQueue;
+    std::queue<T> dataQueue;
     std::mutex mtxSend_;
     std::condition_variable cvSend_;
     std::function<void()> sendDoneCallback = []()
@@ -33,7 +33,7 @@ public:
     SendServer(int port) : TCPServer(port) {};
     ~SendServer() = default;
 
-    void send(T* data)
+    void send(T data)
     {
         dataQueue.push(data);
         cvSend_.notify_one();
@@ -61,14 +61,13 @@ public:
         }
     }
 
-    virtual void sendFunction(T* data)
+    virtual void sendFunction(T data)
     {
 
     }
 
     void stop() override
     {
-        // TODO: Does this work, doesn't join worker thread explicitly????
 
         std::cout << std::format("Stopping TCP Server on {}\n", getPort());
 
@@ -78,6 +77,7 @@ public:
         std::thread* worker = getWorkerThread();
 
         if (worker->joinable()) {
+            std::cout << "Joining SendServer thread" << std::endl;
             worker->join();
         }
     }
@@ -89,14 +89,13 @@ class MessageServer : public SendServer<std::string>
 public:
     MessageServer(int port) : SendServer(port) {};
 
-    void sendFunction(std::string* data) override
+    void sendFunction(std::string data) override
     {
-        write_all(getClientFd(), *data);
-        delete data;
+        write_all(getClientFd(), data);
     }
 };
 
-class DataServer : public SendServer<libcamera::Request>
+class DataServer : public SendServer<libcamera::Request*>
 {
 public:
     DataServer(int port) : SendServer(port) {};
@@ -267,7 +266,10 @@ public:
                 return statusCallback();
             });
 
-
+            controlServer->setResponseCallback([this](std::string msg)
+            {
+               messageServer->send(msg);
+            });
 
 
         }
@@ -308,7 +310,7 @@ public:
 
     std::string statusCallback()
     {
-        return std::format("Free buffers {}/{}", buffersUsed, bufferCount);
+        return std::format("Buffers used {}/{}", buffersUsed, bufferCount);
     }
 
     std::string captureCallback()
