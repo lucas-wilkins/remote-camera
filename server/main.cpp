@@ -354,23 +354,21 @@ public:
         }
 
 
-        std::unique_ptr<libcamera::Request> request;
-        request = camera->createRequest();
-
         {
             std::lock_guard lock(dataServer->requestMutex);
+            std::unique_ptr<libcamera::Request> request = camera->createRequest();
+
+            request->addBuffer(stream, (*buffers)[index].get());
+
+            // Manual exposure settings
+            request->controls().set(libcamera::controls::AeEnable, false);
+            request->controls().set(libcamera::controls::ExposureTime, exposureTime);
+            request->controls().set(libcamera::controls::AnalogueGain, analogueGain);
+
+            camera->queueRequest(request.get());
+
             dataServer->requests.push(std::move(request));
         }
-
-        request->addBuffer(stream, (*buffers)[index].get());
-
-        // Manual exposure settings
-        request->controls().set(libcamera::controls::AeEnable, false);
-        request->controls().set(libcamera::controls::ExposureTime, exposureTime);
-        request->controls().set(libcamera::controls::AnalogueGain, analogueGain);
-
-        camera->queueRequest(request.get());
-
 
         return "Capture Requested\n";
     };
