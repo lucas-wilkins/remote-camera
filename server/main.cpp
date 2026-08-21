@@ -103,11 +103,14 @@ class DataServer : public SendServer<libcamera::Request*>
 public:
     DataServer(int port) : SendServer(port) {};
 
+    std::mutex requestMutex;
+    std::queue<std::unique_ptr<libcamera::Request>> requests;
+
     void sendFunction(libcamera::Request* data) override
     {
         std::cout << "Sending camera data\n";
         write_all(getClientFd(), "Data server test write");
-        delete data;
+        requests.pop();
     }
 };
 
@@ -164,6 +167,7 @@ public:
     std::unique_ptr<libcamera::FrameBufferAllocator> allocator;
     const std::vector<std::unique_ptr<libcamera::FrameBuffer>> *buffers = nullptr;
     libcamera::Stream* stream;
+
 
     std::mutex bufferIndexMutex;
     unsigned int bufferIndex = 0;
@@ -359,6 +363,11 @@ public:
         request->controls().set(libcamera::controls::AnalogueGain, analogueGain);
 
         camera->queueRequest(request.get());
+
+        {
+            std::lock_guard lock(dataServer->requestMutex);
+            dataServer->requests.push(std::move(request));
+        }
 
         return "Capture Requested\n";
     };
