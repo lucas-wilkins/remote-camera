@@ -59,7 +59,9 @@ public:
             {
                 std::cout << "Sending data\n";
                 T request = dataQueue.front();
+                std::cout << "Removing from queue\n";
                 dataQueue.pop();
+                std::cout << "Calling send\n";
                 sendFunction(request);
             }
         }
@@ -353,10 +355,10 @@ public:
 
 
         std::unique_ptr<libcamera::Request> request;
+        request = camera->createRequest();
 
         {
             std::lock_guard lock(dataServer->requestMutex);
-            request = camera->createRequest();
             dataServer->requests.push(std::move(request));
         }
 
