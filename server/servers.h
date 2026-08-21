@@ -158,7 +158,7 @@ inline void TCPServer::run() {
         close(client_fd_);
     }
 
-    std::cout << "Control server stopped\n";
+    std::cout << "Server stopped\n";
 
 }
 

@@ -42,7 +42,7 @@ public:
     void mainLoop() override
     {
 
-        // std::cout << "Data Server mainLoop" << std::endl;
+        std::cout << "Data Server mainLoop" << std::endl;
         while (running_)
         {
             std::unique_lock<std::mutex> lock(mtxSend_);
@@ -59,6 +59,7 @@ public:
                 dataQueue.pop();
             }
         }
+        std::cout << "DataServer mainLoop exiting" << std::endl;
     }
 
     virtual void sendFunction(T data)
