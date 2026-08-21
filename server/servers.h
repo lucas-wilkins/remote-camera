@@ -43,6 +43,7 @@ public:
 
     int getClientFd();
     int getPort();
+    std::thread* getWorkerThread();
 
 private:
     int port_;
@@ -80,6 +81,11 @@ inline TCPServer::~TCPServer()
     stop();
 }
 
+inline std::thread* TCPServer::getWorkerThread()
+{
+    return &worker_;
+}
+
 inline void TCPServer::start() {
     bool expected = false;
     if (!running_.compare_exchange_strong(expected, true)) {
@@ -94,7 +100,7 @@ inline void TCPServer::stop() {
         return;
     }
 
-    std::cout << "Stopping TCP Server on " << port_ << std::endl;
+    // std::cout << "Stopping TCP Server on " << port_ << std::endl;
 
     running_ = false;
 

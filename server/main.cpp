@@ -74,6 +74,12 @@ public:
 
         running_ = false;
         cvSend_.notify_one();
+
+        std::thread* worker = getWorkerThread();
+
+        if (worker->joinable()) {
+            worker->join();
+        }
     }
 
 };
@@ -156,9 +162,9 @@ public:
     libcamera::Stream* stream;
 
     std::mutex bufferIndexMutex;
-    int bufferIndex = 0;
-    int bufferCount = 0;
-    int buffersUsed = 0;
+    unsigned int bufferIndex = 0;
+    unsigned int bufferCount = 0;
+    unsigned int buffersUsed = 0;
 
     Main(int control_port, int message_port, int data_port)
     {
@@ -225,9 +231,9 @@ public:
 
             buffers = &allocator->buffers(stream);
 
-
             std::cout << "Buffer Count: "
                 << cfg.bufferCount << '\n';
+            bufferCount = cfg.bufferCount;
 
             camera->start();
 
