@@ -105,6 +105,7 @@ public:
 
     void sendFunction(libcamera::Request* data) override
     {
+        std::cout << "Sending camera data\n";
         write_all(getClientFd(), "Data server test write");
         delete data;
     }
