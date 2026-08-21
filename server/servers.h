@@ -17,6 +17,7 @@
 #include <arpa/inet.h>
 #include <format>
 #include <syncstream>
+#include <poll.h>
 
 #include "rc_utils.h"
 
@@ -244,11 +245,89 @@ inline void ControlServer::setStatusCallback(std::function<std::string()> callba
 
 inline void ControlServer::mainLoop()
 {
-
-
-    // std::cout << "Control Server mainLoop" << std::endl;
-
     ssize_t n;
+
+    while (running_) {
+        struct pollfd pfd{};
+        pfd.fd = getClientFd();
+        pfd.events = POLLIN;
+
+        int ret = poll(&pfd, 1, 100); // 100 ms timeout
+
+        if (!running_)
+            break;
+
+        if (ret < 0) {
+            if (errno == EINTR)
+                continue;
+
+            // Handle error
+            break;
+        }
+
+        if (ret == 0)
+            continue; // timeout; check running_ again
+
+        if (pfd.revents & POLLIN) {
+            n = read(getClientFd(), buffer, sizeof(buffer));
+
+            if (n <= 0)
+                break;
+
+            int message_type = buffer[0];
+
+            std::string response;
+
+            switch (message_type)
+            {
+            case ControlMessageType::STATUS:
+                response = statusCallback_();
+                break;
+
+            case ControlMessageType::CAPTURE:
+                response = captureCallback_();
+                break;
+
+            case ControlMessageType::SET_EXPOSURE:
+                if (n == 9)
+                {
+                    int64_t value = 0;
+                    std::memcpy(&value, &buffer[1], sizeof(value));
+                    response = exposureCallback_(value);
+                } else
+                {
+                    response = "Malformed exposure time, expected 8 bytes";
+                }
+                break;
+
+            case ControlMessageType::SET_GAIN:
+                if (n == 5)
+                {
+                    float value = 0;
+                    std::memcpy(&value, &buffer[1], sizeof(value));
+                    response = gainCallback_(value);
+                } else
+                {
+                    response = "Malformed gain, expected 5 bytes";
+                }
+
+
+                break;
+
+            default:
+                response = "Unknown Command";
+            }
+
+            std::cout << response << std::endl;
+            write_all(getClientFd(), response);
+
+        }
+
+
+    }
+}
+
+    /*
     while ((n = read(getClientFd(), buffer, sizeof(buffer))) > 0) {
         int message_type = buffer[0];
 
@@ -309,6 +388,6 @@ inline void ControlServer::mainLoop()
     }
 
 
-}
+}*/
 
 #endif //SERVER_SERVERS_H

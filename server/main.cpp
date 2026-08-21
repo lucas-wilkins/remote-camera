@@ -348,7 +348,7 @@ public:
         {
             std::lock_guard lock(bufferIndexMutex);
 
-            bufferCount--;
+            buffersUsed--;
         }
     }
 
