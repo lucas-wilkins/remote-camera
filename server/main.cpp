@@ -57,8 +57,10 @@ public:
 
             while (!dataQueue.empty())
             {
-                sendFunction(dataQueue.front());
+                std::cout << "Sending data\n";
+                T request = dataQueue.front();
                 dataQueue.pop();
+                sendFunction(request);
             }
         }
         std::cout << "DataServer mainLoop exiting" << std::endl;
@@ -110,7 +112,7 @@ public:
     {
         std::cout << "Sending camera data\n";
         write_all(getClientFd(), "Data server test write");
-        requests.pop();
+        requests.pop(); // Destroys item
     }
 };
 
@@ -172,7 +174,6 @@ public:
     std::mutex bufferIndexMutex;
     unsigned int bufferIndex = 0;
     unsigned int bufferCount = 0;
-    unsigned int buffersUsed = 0;
 
     Main(int control_port, int message_port, int data_port)
     {
@@ -327,7 +328,7 @@ public:
 
     std::string statusCallback()
     {
-        return std::format("Buffers used {}/{}", buffersUsed, bufferCount);
+        return std::format("Buffers used {}/{}", dataServer->requests.size(), bufferCount);
     }
 
     std::string captureCallback()
@@ -338,7 +339,7 @@ public:
         {
             std::lock_guard lock(bufferIndexMutex);
 
-            if (buffersUsed >= bufferCount)
+            if (dataServer->requests.size() >= bufferCount)
             {
                 return"Failed to capture, buffers all in use\n";
             }
@@ -347,13 +348,17 @@ public:
 
             bufferIndex++;
             bufferIndex %= bufferCount;
-            buffersUsed++;
 
         }
 
 
-        std::unique_ptr<libcamera::Request> request =
-            camera->createRequest();
+        std::unique_ptr<libcamera::Request> request;
+
+        {
+            std::lock_guard lock(dataServer->requestMutex);
+            request = camera->createRequest();
+            dataServer->requests.push(std::move(request));
+        }
 
         request->addBuffer(stream, (*buffers)[index].get());
 
@@ -364,22 +369,9 @@ public:
 
         camera->queueRequest(request.get());
 
-        {
-            std::lock_guard lock(dataServer->requestMutex);
-            dataServer->requests.push(std::move(request));
-        }
 
         return "Capture Requested\n";
     };
-
-    void sendDoneCallback()
-    {
-        {
-            std::lock_guard lock(bufferIndexMutex);
-
-            buffersUsed--;
-        }
-    }
 
 };
 
