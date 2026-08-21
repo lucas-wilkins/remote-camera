@@ -341,6 +341,8 @@ inline void ControlServer::mainLoop()
 
 
     }
+
+    std::cout << "ControlServer mainLoop exited" << std::endl;
 }
 
     /*
