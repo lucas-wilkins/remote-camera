@@ -41,7 +41,6 @@ public:
     void mainLoop() override
     {
 
-        std::cout << "Data Server mainLoop" << std::endl;
         while (running_)
         {
             {
@@ -61,7 +60,6 @@ public:
                 sendFunction(request);
             }
         }
-        std::cout << "DataServer mainLoop exiting" << std::endl;
     }
 
 
@@ -76,7 +74,6 @@ public:
         std::thread* worker = getWorkerThread();
 
         if (worker->joinable()) {
-            std::cout << "Joining SendServer thread" << std::endl;
             worker->join();
         }
     }
@@ -105,7 +102,7 @@ public:
     void sendFunction(libcamera::Request* data) override
     {
         std::cout << "Sending camera data\n";
-        write_all(getClientFd(), "Data server test write");
+        write_all(getClientFd(), std::format("Dummy send of frame {}\n", data->cookie()));
         requests.pop(); // Destroys item
     }
 };
@@ -357,7 +354,7 @@ public:
 
         {
             std::lock_guard lock(dataServer->requestMutex);
-            std::unique_ptr<libcamera::Request> request = camera->createRequest();
+            std::unique_ptr<libcamera::Request> request = camera->createRequest(cookie);
 
             request->addBuffer(stream, (*buffers)[index].get());
 
@@ -365,9 +362,6 @@ public:
             request->controls().set(libcamera::controls::AeEnable, false);
             request->controls().set(libcamera::controls::ExposureTime, exposureTime);
             request->controls().set(libcamera::controls::AnalogueGain, analogueGain);
-
-            // Cookie (i.e. frame id)
-            request->setCookie(cookie);
 
             camera->queueRequest(request.get());
 

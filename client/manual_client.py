@@ -29,6 +29,8 @@ for port in [settings.message_port, settings.data_port]:
 test_exposure = 12345
 test_gain = 2.3
 
+frame_no = 999
+
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((settings.address, settings.control_port))
     while True:
@@ -47,6 +49,9 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         b = bytes([n])
 
         match n:
+            case 1:
+                b = b + int(frame_no).to_bytes(8, 'little')
+                frame_no += 1
             case 2:
                 b = b + int(test_exposure).to_bytes(8, 'little')
             case 3:
