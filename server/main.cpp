@@ -24,10 +24,7 @@ private:
     std::queue<T> dataQueue;
     std::mutex mtxSend_;
     std::condition_variable cvSend_;
-    std::function<void()> sendDoneCallback = []()
-    {
-        std::cout << "sendDoneCallback not set yet" << std::endl;
-    };
+
 
 public:
     SendServer(int port) : TCPServer(port) {};
@@ -38,6 +35,8 @@ public:
         dataQueue.push(data);
         cvSend_.notify_one();
     }
+
+    virtual void sendFunction(T data) {}
 
     void mainLoop() override
     {
@@ -57,21 +56,14 @@ public:
 
             while (!dataQueue.empty())
             {
-                std::cout << "Sending data\n";
                 T request = dataQueue.front();
-                std::cout << "Removing from queue\n";
                 dataQueue.pop();
-                std::cout << "Calling send\n";
                 sendFunction(request);
             }
         }
         std::cout << "DataServer mainLoop exiting" << std::endl;
     }
 
-    virtual void sendFunction(T data)
-    {
-
-    }
 
     void stop() override
     {
@@ -268,9 +260,9 @@ public:
 
 
             // Control server callbacks
-            controlServer->setCaptureCallback([this]()
+            controlServer->setCaptureCallback([this](uint64_t cookie)
             {
-                return captureCallback();
+                return captureCallback(cookie);
             });
 
             controlServer->setExposureCallback([this](int exposure)
@@ -330,12 +322,21 @@ public:
 
     std::string statusCallback()
     {
-        return std::format("Buffers used {}/{}", dataServer->requests.size(), bufferCount);
+        return std::format("Buffers used: {}/{}\nExposure: {}us\nGain: {}",
+            dataServer->requests.size(),
+            bufferCount,
+            exposureTime,
+            analogueGain);
     }
 
-    std::string captureCallback()
+    std::string captureCallback(uint64_t cookie)
     {
         int index;
+
+        if (!dataServer->connected())
+        {
+            return "ERROR: Failed to capture, no client connected on data port";
+        }
 
         // Add a request to the queue
         {
@@ -343,7 +344,7 @@ public:
 
             if (dataServer->requests.size() >= bufferCount)
             {
-                return"Failed to capture, buffers all in use\n";
+                return"ERROR: Failed to capture, buffers all in use";
             }
 
             index = bufferIndex;
@@ -364,6 +365,9 @@ public:
             request->controls().set(libcamera::controls::AeEnable, false);
             request->controls().set(libcamera::controls::ExposureTime, exposureTime);
             request->controls().set(libcamera::controls::AnalogueGain, analogueGain);
+
+            // Cookie (i.e. frame id)
+            request->setCookie(cookie);
 
             camera->queueRequest(request.get());
 

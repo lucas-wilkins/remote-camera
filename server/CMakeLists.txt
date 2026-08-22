@@ -43,6 +43,7 @@ add_executable(server
         rc_utils.h
         constants.h
         servers.h
+        serialisation.h
 )
 
 

@@ -153,13 +153,12 @@ inline void TCPServer::run() {
         mainLoop();
 
         std::cout << "Client Disconnected\n";
-
+        connected_ = false;
 
         close(client_fd_);
     }
 
     std::cout << "Server stopped\n";
-
 }
 
 inline int TCPServer::getClientFd()
@@ -182,6 +181,11 @@ inline std::function<void(std::string)> TCPServer::getErrorMessageCallback()
     return errorMessageCallback_;
 }
 
+inline bool TCPServer::connected()
+{
+    return connected_;
+}
+
 
 /*
  * Control Server
@@ -197,7 +201,7 @@ public:
     void mainLoop() override;
     void setExposureCallback(std::function<std::string(int64_t)> callback);
     void setGainCallback(std::function<std::string(float)> callback);
-    void setCaptureCallback(std::function<std::string()> callback);
+    void setCaptureCallback(std::function<std::string(uint64_t)> callback);
     void setStatusCallback(std::function<std::string()> callback);
     void setResponseCallback(std::function<void(std::string)> callback);
 
@@ -216,7 +220,7 @@ private:
         return std::format("No gain callback set (attempted to set to {})", gain);
     };
 
-    std::function<std::string()> captureCallback_ = []
+    std::function<std::string(uint64_t)> captureCallback_ = [](uint64_t cookie)
     {
         return "No capture callback set";
     };
@@ -243,7 +247,7 @@ inline void ControlServer::setGainCallback(std::function<std::string(float)> cal
     gainCallback_ = callback;
 }
 
-inline void ControlServer::setCaptureCallback(std::function<std::string()> callback)
+inline void ControlServer::setCaptureCallback(std::function<std::string(uint64_t)> callback)
 {
     captureCallback_ = callback;
 }
@@ -301,7 +305,15 @@ inline void ControlServer::mainLoop()
                 break;
 
             case ControlMessageType::CAPTURE:
-                response = captureCallback_();
+                if (n==9)
+                {
+                    uint64_t value = 0;
+                    std::memcpy(&value, &buffer[1], sizeof(value));
+                    response = captureCallback_(value);
+                } else
+                {
+                    response = "Malformed capture id, expected 8 bytes";
+                }
                 break;
 
             case ControlMessageType::SET_EXPOSURE:
@@ -345,67 +357,6 @@ inline void ControlServer::mainLoop()
     std::cout << "ControlServer mainLoop exited" << std::endl;
 }
 
-    /*
-    while ((n = read(getClientFd(), buffer, sizeof(buffer))) > 0) {
-        int message_type = buffer[0];
 
-        std::cout << "Received message " << message_type << std::endl;
-
-        std::string msg;
-        std::string response;
-
-        if (false)
-        {
-            response = "ERROR: Data server not set up";
-        }
-        else
-        {
-            switch (message_type)
-            {
-            case ControlMessageType::STATUS:
-                response = statusCallback_();
-                break;
-
-            case ControlMessageType::CAPTURE:
-                response = captureCallback_();
-                break;
-
-            case ControlMessageType::SET_EXPOSURE:
-                if (n == 9)
-                {
-                    int64_t value = 0;
-                    std::memcpy(&value, &buffer[1], sizeof(value));
-                    response = exposureCallback_(value);
-                } else
-                {
-                    response = "Malformed exposure time, expected 8 bytes";
-                }
-                break;
-
-            case ControlMessageType::SET_GAIN:
-                if (n == 5)
-                {
-                    float value = 0;
-                    std::memcpy(&value, &buffer[1], sizeof(value));
-                    response = gainCallback_(value);
-                } else
-                {
-                    response = "Malformed gain, expected 5 bytes";
-                }
-
-
-                break;
-
-            default:
-                response = "Unknown Command";
-            }
-        }
-
-        std::cout << response << std::endl;
-        write_all(getClientFd(), response);
-    }
-
-
-}*/
 
 #endif //SERVER_SERVERS_H
