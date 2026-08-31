@@ -4,6 +4,7 @@
 
 #include "rc_utils.h"
 
+#include <span>
 #include <string>
 #include <unistd.h>
 #include <stdexcept>
@@ -26,6 +27,24 @@ void write_all(int sock_fd, const std::string& msg)
         {
             throw std::runtime_error("write failed");
         }
+
+        total_sent += static_cast<size_t>(n);
+    }
+}
+
+void write_all_bytes(int sock_fd, std::span<const std::byte> data)
+{
+    size_t total_sent = 0;
+
+    while (total_sent < data.size())
+    {
+        ssize_t n = write(
+            sock_fd,
+            data.data() + total_sent,
+            data.size() - total_sent);
+
+        if (n < 0)
+            throw std::runtime_error("write failed");
 
         total_sent += static_cast<size_t>(n);
     }

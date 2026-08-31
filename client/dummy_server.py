@@ -24,6 +24,7 @@ class SendServer:
 
         self.event = threading.Event()
         self.msg: str | None = None
+        self.connected = False
 
         t = threading.Thread(target=self.run)
         t.start()
@@ -40,14 +41,17 @@ class SendServer:
 
 
             with conn:
-                connected = True
-                while connected:
+                self.connected = True
+                while self.connected:
 
                     self.event.wait(timeout=0.1)
                     self.event.clear()
                     if self.msg is not None:
-                        conn.sendall(self.msg.encode())
-                        self.msg = None
+                        try:
+                            conn.sendall(self.msg.encode())
+                            self.msg = None
+                        except Exception as e:
+                            break
 
             print(f"Client disconnected {addr[0]}:{self.port} ({addr[1]})\n", end="")
 
@@ -70,7 +74,10 @@ def listen_server(port, message_server: SendServer, data_server: SendServer):
                     message_server.send(f"Received {data}\n")
 
                     if data[0] == MessageType.CAPTURE.value:
-                        data_server.send("Dummy capture data\n")
+                        if data_server.connected:
+                            data_server.send("Dummy capture data\n")
+                        else:
+                            message_server.send("Data client not connected\n")
 
             print(f"Client disconnected {addr[0]}:{port} ({addr[1]})\n", end="")
 

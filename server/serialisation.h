@@ -5,7 +5,7 @@
 #pragma pack(push, 1)
 #include <cstdint>
 
-struct ImageMetadata {
+struct ImageDataHeader {
     std::uint32_t image_id;
     std::uint64_t timestamp;
     std::uint32_t bytesused;

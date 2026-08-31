@@ -15,6 +15,7 @@
 #include "constants.h"
 #include "servers.h"
 #include "rc_utils.h"
+#include "serialisation.h"
 
 template <class T>
 class SendServer : public TCPServer
@@ -102,43 +103,63 @@ public:
     void sendFunction(libcamera::Request* data) override
     {
         std::cout << "Sending camera data\n";
-        write_all(getClientFd(), std::format("Dummy send of frame {}\n", data->cookie()));
+
+        // Really should only ever be one buffer here, but a for loop works
+        for (const auto &[stream, buffer] : data->buffers())
+        {
+            if (data->status() == libcamera::Request::RequestCancelled)
+                return;
+
+            const libcamera::ControlList &metadata = data->metadata();
+            const libcamera::FrameMetadata &frameMetadata = buffer->metadata();
+
+            ImageDataHeader header;
+
+            // ID
+            header.image_id = data->cookie();
+
+            // Bytes - should only be one plane in our case
+            header.bytesused = 0;
+            for (size_t i=0; i<buffer->planes().size(); i++)
+            {
+                header.bytesused += frameMetadata.planes()[i].bytesused;
+            }
+
+            // Timestamp
+            if (metadata.contains(libcamera::controls::FrameWallClock.id()))
+            {
+                header.timestamp = metadata.get(libcamera::controls::FrameWallClock).value();
+            } else
+            {
+                header.timestamp = 0;
+            }
+
+            // Frame duration
+            if (metadata.contains(libcamera::controls::FrameDuration.id())) {
+                header.frameDuration =
+                    metadata.get(libcamera::controls::FrameDuration).value();
+            } else
+            {
+                header.frameDuration = 0;
+            }
+
+            // Exposure time
+            if (metadata.contains(libcamera::controls::ExposureTime.id())) {
+                header.exposure =
+                    metadata.get(libcamera::controls::ExposureTime).value();
+
+            } else
+            {
+                header.exposure = 0;
+            }
+
+            write_all_bytes(getClientFd(), std::as_bytes(std::span{&header, 1}));
+            // write_all(getClientFd(), std::format("Dummy send of frame {}\n", data->cookie()));
+        }
+
         requests.pop(); // Destroys item
     }
 };
-
-/** Callback: Things to do when a request completes */
-/*
-void requestComplete(libcamera::Request *request)
-{
-    if (request->status() == libcamera::Request::RequestCancelled)
-        return;
-
-    const libcamera::ControlList &metadata = request->metadata();
-
-    if (metadata.contains(libcamera::controls::FrameDuration.id())) {
-        int64_t frameDuration =
-            metadata.get(libcamera::controls::FrameDuration).value();
-
-        std::cout << "Frame duration: "
-                  << frameDuration << " us\n";
-    }
-
-    if (metadata.contains(libcamera::controls::ExposureTime.id())) {
-        int64_t exposure =
-            metadata.get(libcamera::controls::ExposureTime).value();
-
-        std::cout << "Exposure: "
-                  << exposure << " us\n";
-    }
-}*/
-
-
-/** Stuff for controlling main program loop */
-std::atomic<bool> mainLoopRunning{true};
-void sigintListener(int) {
-    mainLoopRunning = false;
-}
 
 
 

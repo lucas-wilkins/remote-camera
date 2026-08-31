@@ -150,7 +150,13 @@ inline void TCPServer::run() {
 
         std::cout << "Client Connected\n";
 
-        mainLoop();
+        try
+        {
+            mainLoop();
+        }
+        catch (const std::exception& e) {
+            std::cerr << "Error: " << e.what() << std::endl;
+        }
 
         std::cout << "Client Disconnected\n";
         connected_ = false;
