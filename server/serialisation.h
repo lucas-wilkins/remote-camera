@@ -2,9 +2,10 @@
 #ifndef SERVER_SERIALISATION_H
 #define SERVER_SERIALISATION_H
 
-#pragma pack(push, 1)
+
 #include <cstdint>
 
+#pragma pack(push, 1)
 struct ImageDataHeader {
     std::uint32_t image_id;
     std::uint64_t timestamp;

@@ -7,6 +7,7 @@ from PySide6.QtGui import QFont, QDoubleValidator, QIntValidator
 from PySide6.QtWidgets import QWidget, QPushButton, QComboBox, QLineEdit, QVBoxLayout, QSpacerItem, QHBoxLayout, \
     QApplication, QSizePolicy, QTextEdit
 
+from client.read_from_remote import ImageData
 from settings import Settings
 settings = Settings()
 
@@ -298,16 +299,8 @@ class DataWindow(QWidget):
 
                     while self.stay_connected:
                         try:
-                            data = s.recv(1024)
-
-                            if len(data) == 0:
-                                break
-
-                            buffer += data
-
-                            while b"\n" in buffer:
-                                line, buffer = buffer.split(b"\n", 1)
-                                self.message(line.decode())
+                            image_data = ImageData.receive(s)
+                            self.message(repr(image_data.header))
 
                         except socket.timeout:
                             continue

@@ -1,10 +1,10 @@
 import numpy as np
 
 def load_raw_from_file(filename: str):
-    return read_raw(np.fromfile(filename, dtype=np.uint8))
+    return convert_raw(np.fromfile(filename, dtype=np.uint8))
 
 
-def read_raw(data: np.ndarray, width: int = 4056, height: int = 3040):
+def convert_raw(data: np.ndarray, width: int = 4056, height: int = 3040):
 
     byte_width = width * 3 // 2
     stride = byte_width // 32
