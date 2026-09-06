@@ -88,7 +88,14 @@ public:
 
     void sendFunction(std::string data) override
     {
-        write_all(getClientFd(), data);
+        try
+        {
+            write_all(getClientFd(), data);
+        }
+        catch (const std::runtime_error e)
+        {
+            std::cerr << e.what() << '\n';
+        }
     }
 };
 
@@ -100,61 +107,110 @@ public:
     std::mutex requestMutex;
     std::queue<std::unique_ptr<libcamera::Request>> requests;
 
+    bool sendPlane(int sock_fd, const libcamera::FrameBuffer::Plane &plane)
+    {
+        const int fd = plane.fd.get();
+        const size_t offset = plane.offset;
+        const size_t length = plane.length;
+
+        const long page_size = sysconf(_SC_PAGESIZE);
+        const size_t map_offset = offset & ~(page_size - 1);
+        const size_t delta = offset - map_offset;
+        const size_t map_length = delta + length;
+
+        void *mapping = mmap(
+            nullptr,
+            map_length,
+            PROT_READ,
+            MAP_SHARED,
+            fd,
+            map_offset);
+
+        if (mapping == MAP_FAILED)
+            throw std::runtime_error("mmap failed");
+
+        auto *data = static_cast<const std::byte *>(mapping) + delta;
+
+        try {
+            write_all_bytes(
+                sock_fd,
+                std::span<const std::byte>(data, length));
+        } catch (...) {
+            munmap(mapping, map_length);
+            throw;
+        }
+
+        munmap(mapping, map_length);
+        return true;
+    }
+
     void sendFunction(libcamera::Request* data) override
     {
         std::cout << "Sending camera data\n";
 
-        // Really should only ever be one buffer here, but a for loop works
-        for (const auto &[stream, buffer] : data->buffers())
+        try
         {
-            if (data->status() == libcamera::Request::RequestCancelled)
-                return;
-
-            const libcamera::ControlList &metadata = data->metadata();
-            const libcamera::FrameMetadata &frameMetadata = buffer->metadata();
-
-            ImageDataHeader header;
-
-            // ID
-            header.image_id = data->cookie();
-
-            // Bytes - should only be one plane in our case
-            header.bytesused = 0;
-            for (size_t i=0; i<buffer->planes().size(); i++)
+            // Really should only ever be one buffer here, but a for loop works
+            for (const auto &[stream, buffer] : data->buffers())
             {
-                header.bytesused += frameMetadata.planes()[i].bytesused;
+                if (data->status() == libcamera::Request::RequestCancelled)
+                    return;
+
+                const libcamera::ControlList &metadata = data->metadata();
+                const libcamera::FrameMetadata &frameMetadata = buffer->metadata();
+
+                ImageDataHeader header;
+
+                // ID
+                header.image_id = data->cookie();
+
+                // Bytes - should only be one plane in our case
+                header.bytesused = 0;
+                for (size_t i=0; i<buffer->planes().size(); i++)
+                {
+                    header.bytesused += frameMetadata.planes()[i].bytesused;
+                }
+
+                // Timestamp
+                if (metadata.contains(libcamera::controls::FrameWallClock.id()))
+                {
+                    header.timestamp = metadata.get(libcamera::controls::FrameWallClock).value();
+                } else
+                {
+                    header.timestamp = 0;
+                }
+
+                // Frame duration
+                if (metadata.contains(libcamera::controls::FrameDuration.id())) {
+                    header.frameDuration =
+                        metadata.get(libcamera::controls::FrameDuration).value();
+                } else
+                {
+                    header.frameDuration = 0;
+                }
+
+                // Exposure time
+                if (metadata.contains(libcamera::controls::ExposureTime.id())) {
+                    header.exposure =
+                        metadata.get(libcamera::controls::ExposureTime).value();
+
+                } else
+                {
+                    header.exposure = 0;
+                }
+
+                write_all_bytes(getClientFd(), std::as_bytes(std::span{&header, 1}));
+
+                // Write the main data
+                for (const auto& plane : buffer->planes())
+                    sendPlane(getClientFd(), plane);
+
             }
 
-            // Timestamp
-            if (metadata.contains(libcamera::controls::FrameWallClock.id()))
-            {
-                header.timestamp = metadata.get(libcamera::controls::FrameWallClock).value();
-            } else
-            {
-                header.timestamp = 0;
-            }
-
-            // Frame duration
-            if (metadata.contains(libcamera::controls::FrameDuration.id())) {
-                header.frameDuration =
-                    metadata.get(libcamera::controls::FrameDuration).value();
-            } else
-            {
-                header.frameDuration = 0;
-            }
-
-            // Exposure time
-            if (metadata.contains(libcamera::controls::ExposureTime.id())) {
-                header.exposure =
-                    metadata.get(libcamera::controls::ExposureTime).value();
-
-            } else
-            {
-                header.exposure = 0;
-            }
-
-            write_all_bytes(getClientFd(), std::as_bytes(std::span{&header, 1}));
-            // write_all(getClientFd(), std::format("Dummy send of frame {}\n", data->cookie()));
+        }
+        catch (const std::runtime_error e)
+        {
+            std::cerr << e.what() << '\n';
         }
 
         requests.pop(); // Destroys item
