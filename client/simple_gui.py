@@ -264,8 +264,12 @@ class DataWindow(QWidget):
         disconnect = QPushButton("Disconnect")
         disconnect.clicked.connect(self.disconnect)
 
+        show = QPushButton("Show last")
+        show.clicked.connect(self.show_last)
+
         layout.addWidget(connect)
         layout.addWidget(disconnect)
+        layout.addWidget(show)
 
         self.setLayout(layout)
 
@@ -273,6 +277,8 @@ class DataWindow(QWidget):
 
         self.connected = False
         self.message_thread = None
+
+        self.images = []
 
 
     def message(self, msg):
@@ -301,6 +307,8 @@ class DataWindow(QWidget):
                         try:
                             image_data = ImageData.receive(s)
                             self.message(repr(image_data.header))
+                            self.message(f"Transfer time {image_data.transfer_time}")
+                            self.images.append(image_data)
 
                         except socket.timeout:
                             continue
@@ -325,6 +333,10 @@ class DataWindow(QWidget):
             self.message("Already Disconnected")
 
         self.stay_connected = False
+
+    def show_last(self):
+        if len(self.images) > 0:
+            self.images[-1].matplotlib_show()
 
 
 if __name__ == "__main__":

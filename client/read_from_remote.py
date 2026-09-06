@@ -1,5 +1,6 @@
 import socket
 import struct
+import time
 from dataclasses import dataclass
 
 import numpy as np
@@ -40,12 +41,17 @@ class FrameInfo:
         return cls._STRUCT.size
 
 class ImageData:
-    def __init__(self, header: FrameInfo, raw_bytes: bytes):
+    def __init__(self,
+                 header: FrameInfo,
+                 raw_bytes: bytes,
+                 transfer_time: float):
+
         self.header = header
+        self.transfer_time = transfer_time
 
         numpy_data = np.frombuffer(raw_bytes, dtype=np.uint8)
 
-        # self.raw_image = convert_raw(numpy_data)
+        self.raw_image = convert_raw(numpy_data)
 
     def matplotlib_show(self):
         import matplotlib.pyplot as plt
@@ -57,10 +63,11 @@ class ImageData:
 
     @staticmethod
     def receive(sock):
+        tic = time.time()
         header_data = recv_exact(sock, FrameInfo.size())
         header = FrameInfo.from_bytes(header_data)
 
         data_section = recv_exact(sock, header.bytesused)
-        #data_section = bytes([])
+        transfer_time = time.time() - tic
 
-        return ImageData(header, data_section)
+        return ImageData(header, data_section, transfer_time)
