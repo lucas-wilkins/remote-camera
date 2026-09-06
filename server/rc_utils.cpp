@@ -40,7 +40,7 @@ void write_all_bytes(int sock_fd, std::span<const std::byte> data)
 
     while (total_sent < data.size())
     {
-        auto start = std::chrono::steady_clock::now();
+        // auto start = std::chrono::steady_clock::now();
 
         ssize_t n = write(
             sock_fd,
@@ -50,14 +50,14 @@ void write_all_bytes(int sock_fd, std::span<const std::byte> data)
         if (n < 0)
             throw std::runtime_error("write failed");
 
-        auto elapsed =
-            std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - start);
-
-        if (elapsed.count() > 10)
-            std::cerr << "write blocked: "
-                      << elapsed.count()
-                      << " ms\n";
+        // auto elapsed =
+        //     std::chrono::duration_cast<std::chrono::milliseconds>(
+        //         std::chrono::steady_clock::now() - start);
+        //
+        // if (elapsed.count() > 10)
+        //     std::cerr << "write blocked: "
+        //               << elapsed.count()
+        //               << " ms\n";
 
         total_sent += static_cast<size_t>(n);
     }
