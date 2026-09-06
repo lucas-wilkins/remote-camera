@@ -60,7 +60,7 @@ class ImageData:
         header_data = recv_exact(sock, FrameInfo.size())
         header = FrameInfo.from_bytes(header_data)
 
-        #data_section = recv_exact(sock, header.bytesused)
-        data_section = bytes([])
+        data_section = recv_exact(sock, header.bytesused)
+        #data_section = bytes([])
 
         return ImageData(header, data_section)
